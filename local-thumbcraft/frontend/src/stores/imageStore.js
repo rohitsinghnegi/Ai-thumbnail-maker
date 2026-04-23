@@ -22,12 +22,14 @@ const useImageStore = create((set, get) => ({
           body: JSON.stringify({
             description: prompt,
             style: answers.thumbnailStyle || 'Photo-realistic',
+            thumbnailStyle: answers.thumbnailStyle,
             mood: answers.mood || 'Professional',
             focus: answers.category || 'General',
             theme: answers.theme,
             primaryColor: answers.primaryColor,
             includeText: answers.includeText,
             textStyle: answers.textStyle,
+            thumbnailTemplate: answers.thumbnailTemplate,
             customPrompt: answers.customPrompt,
             enhancePrompt: true
           })

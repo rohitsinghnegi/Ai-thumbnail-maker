@@ -16,6 +16,7 @@ const useUIStore = create((set, get) => ({
     includeText: '',
     textStyle: '',
     thumbnailStyle: '',
+    thumbnailTemplate: '',
     customPrompt: '',
     imageCount: '1'
   },
@@ -87,6 +88,7 @@ const useUIStore = create((set, get) => ({
       includeText: '',
       textStyle: '',
       thumbnailStyle: '',
+      thumbnailTemplate: '',
       customPrompt: '',
       imageCount: '1'
     },
@@ -98,10 +100,25 @@ const useUIStore = create((set, get) => ({
     { key: 'mood', title: 'What mood do you want to convey?', options: ['Excited', 'Serious', 'Fun', 'Professional', 'Mysterious', 'Energetic'] },
     { key: 'theme', title: 'What theme do you prefer?', options: ['Bright', 'Dark', 'Colorful', 'Minimalist', 'Gradient', 'Neon'] },
     { key: 'primaryColor', title: 'Choose a primary color', options: ['Red', 'Blue', 'Green', 'Purple', 'Orange', 'Yellow', 'Pink', 'Cyan'] },
+    { key: 'thumbnailStyle', title: 'What visual style do you want?', options: ['Photo-realistic', 'Cartoonish', 'Minimalistic', 'Artistic', 'Modern', 'Vintage'] },
+    {
+      key: 'thumbnailTemplate',
+      title: 'Choose a composition template',
+      isTemplate: true,
+      options: [
+        { name: 'Face Close-Up',     icon: '🧑', desc: 'Subject face fills frame, text space on side' },
+        { name: 'Split Screen',      icon: '⬜⬛', desc: 'Two contrasting concepts side by side' },
+        { name: 'Before & After',    icon: '🔄', desc: 'Horizontal split showing transformation' },
+        { name: 'Product Showcase',  icon: '🎯', desc: 'Hero product centered, spotlight effect' },
+        { name: 'Action Shot',       icon: '⚡', desc: 'Dynamic diagonal, motion blur, energy' },
+        { name: 'Minimal Text',      icon: '📝', desc: 'Bold typography as the main visual' },
+        { name: 'Collage Grid',      icon: '🔲', desc: '2×2 mosaic of related images' },
+        { name: 'Full Immersive',    icon: '🌅', desc: 'Epic cinematic wide landscape scene' }
+      ]
+    },
     { key: 'includeText', title: 'Include text in thumbnail?', options: ['Yes', 'No'] },
     { key: 'textStyle', title: 'What text style do you prefer?', options: ['Bold', 'Minimal', 'Fancy', 'Outlined', 'Shadow', 'Gradient'] },
-    { key: 'thumbnailStyle', title: 'What thumbnail style do you want?', options: ['Photo-realistic', 'Cartoonish', 'Minimalistic', 'Artistic', 'Modern', 'Vintage'] },
-    { key: 'customPrompt', title: 'Any additional requirements?', isTextInput: true, placeholder: 'Optional: Add any specific details...' },
+    { key: 'customPrompt', title: 'Any additional requirements?', isTextInput: true, placeholder: 'Optional: Add any specific details, elements, or instructions...' },
     { key: 'imageCount', title: 'How many thumbnails do you want?', options: ['1', '2'] }
   ]
 }));
