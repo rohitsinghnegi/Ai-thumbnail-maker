@@ -1,0 +1,278 @@
+const express = require('express');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const fs = require('fs-extra');
+const path = require('path');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+dotenv.config();
+
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+
+const uploadsDir = path.join(__dirname, 'uploads');
+fs.ensureDirSync(uploadsDir);
+app.use('/images', express.static(uploadsDir));
+
+const dbFile = path.join(__dirname, 'db.json');
+if (!fs.existsSync(dbFile)) fs.writeJsonSync(dbFile, []);
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// ============================================================
+// STAGE 1: VISUAL CONSTRAINT DICTIONARY
+// Maps quiz answers → professional cinematography / design keywords
+// ============================================================
+const MOOD_KEYWORDS = {
+    'Excited':      'vibrant color grading, high-energy dynamic lighting, explosive visual impact, saturated bold palette, electric atmosphere, kinetic composition',
+    'Serious':      'dramatic chiaroscuro lighting, desaturated tones, heavy contrast, authoritative gravitas, cinematic tension, dark vignette edges',
+    'Fun':          'playful pastel tones, bright cheerful lighting, dynamic angles, whimsical elements, comic-style pop colors, energetic fun composition',
+    'Professional': 'clean corporate aesthetic, premium lighting setup, polished finish, subtle gradients, minimal clutter, sophisticated color grading',
+    'Mysterious':   'deep shadow play, moody low-key lighting, enigmatic atmosphere, fog effects, dark blues and purples, cinematic depth',
+    'Energetic':    'fast-paced visual language, motion blur accents, hyper-saturated colors, explosive energy, dramatic wide angle, power composition'
+};
+
+const STYLE_KEYWORDS = {
+    'Photo-realistic': 'hyperrealistic photography, 8K ultra HD, Canon EOS R5 lens quality, studio-grade lighting, DSLR bokeh, photojournalism quality',
+    'Cartoonish':      'stylized illustration, bold outlines, vibrant flat colors, comic art style, exaggerated features, animated character design',
+    'Minimalistic':    'clean white space, simple geometric forms, sans-serif typography, Swiss design principles, elegant negative space, breathable layout',
+    'Artistic':        'oil painting texture, impressionist brushstrokes, painterly light, gallery-quality artwork, fine art digital painting',
+    'Modern':          'contemporary design language, glassmorphism effects, sharp geometry, futuristic UI elements, clean lines, tech aesthetic',
+    'Vintage':         'film grain overlay, warm sepia tones, retro color grading, aged texture, nostalgic filter, classic film photography style'
+};
+
+const THEME_KEYWORDS = {
+    'Bright':     'high-key lighting, overexposed whites, sunny cheerful palette, brilliant highlights, airy open atmosphere',
+    'Dark':       'low-key dramatic lighting, deep shadows, noir atmosphere, dark background, contrast-heavy composition',
+    'Colorful':   'rainbow spectrum palette, color-blocking technique, chromatic vibrancy, multi-hue gradients, bold color contrasts',
+    'Minimalist': 'monochromatic palette, single accent color, abundant white space, clean uncluttered layout',
+    'Gradient':   'smooth color transitions, duotone gradient overlay, linear color sweep, iridescent sheen, ombre effect',
+    'Neon':       'neon glow effects, cyberpunk lighting, fluorescent accents, dark background with glowing elements, LED light aesthetic'
+};
+
+const COLOR_KEYWORDS = {
+    'Red':    'deep crimson and scarlet tones, warm red accent lighting, bold red focal point, high-energy red palette',
+    'Blue':   'cool azure and navy palette, blue cinematic grade, deep ocean blues, calm blue ambient lighting',
+    'Green':  'lush emerald tones, nature-inspired green palette, vibrant lime accents, forest green depth',
+    'Purple': 'royal violet palette, mystical purple lighting, deep amethyst tones, purple cinematic grade',
+    'Orange': 'warm amber and tangerine tones, golden hour lighting, rich orange focal accent, warm energetic palette',
+    'Yellow': 'bright golden tones, sunlit yellow atmosphere, cheerful golden accent, warm sunburst colors',
+    'Pink':   'rose and magenta palette, soft pink pastel tones, vibrant hot-pink accents, feminine color story',
+    'Cyan':   'electric teal and cyan palette, neon aqua accents, cool tech-blue cyan, futuristic cyan glow'
+};
+
+const CATEGORY_KEYWORDS = {
+    'Tech':          'futuristic interface elements, circuit board motifs, holographic UI, glowing screens, tech product backdrop',
+    'Gaming':        'dramatic game scene, controller silhouette, game art aesthetic, explosive visual FX, gaming rig atmosphere',
+    'Vlog':          'lifestyle photography feel, natural authentic light, real-world setting, candid moment energy, relatable environment',
+    'Tutorial':      'clear instructional composition, step-by-step visual cues, clean layout, educational clarity, diagram-friendly space',
+    'Entertainment': 'showbiz glamour, stage lighting, entertainment spectacle, celebrity-style composition, crowd energy',
+    'News':          'breaking news urgency, bold headline space, journalistic photography, authoritative factual tone, broadcast aesthetic'
+};
+
+const TEXT_STYLE_KEYWORDS = {
+    'Bold':     'massive bold impact typography, heavy black letterforms, punchy headline text treatment',
+    'Minimal':  'clean thin typography, elegant light-weight font, understated sophisticated text',
+    'Fancy':    'decorative script lettering, elegant serif typography, ornate display font',
+    'Outlined': 'outlined knockout text, stroke typography, high contrast outlined letters',
+    'Shadow':   'drop shadow text treatment, 3D extruded letterforms, depth-layered text',
+    'Gradient': 'gradient fill typography, color-flow text, iridescent shimmering letters'
+};
+
+// ============================================================
+// STAGE 2: VISUAL TEMPLATE COMPOSITION GUIDE
+// Tells the AI exactly WHERE to place subjects and where to leave
+// negative space for text — critical for functional thumbnails
+// ============================================================
+const TEMPLATE_COMPOSITIONS = {
+    'Face Close-Up':
+        'extreme close-up portrait shot, subject face fills 70% of frame on right side, strong emotional expression, left third left clear for text overlay, shallow depth of field background',
+    'Split Screen':
+        'split-screen composition divided vertically down center, left half shows one concept, right half contrasting concept, bold dividing line, each side independently lit',
+    'Before & After':
+        'horizontal split composition, top half shows "before" state, bottom half shows dramatic "after" transformation, bold dividing band in center for text',
+    'Product Showcase':
+        'hero product centered in frame, spotlit from above, dark gradient vignette background, product occupies center 60%, top third clear for title text',
+    'Action Shot':
+        'dynamic diagonal composition, subject in motion at lower-left, energy trails and motion blur, upper-right corner clear for bold text, wide cinematic aspect ratio',
+    'Minimal Text':
+        'bold large-scale typography dominates 60% of the image, minimal background illustration, strong contrast between text and background, poster-style graphic design layout',
+    'Collage Grid':
+        '2x2 grid mosaic of 4 related images stitched together, thin border separating each cell, overall cohesive color palette, title text can overlay grid center',
+    'Full Immersive':
+        'full-bleed immersive environment shot, subject integrated into epic landscape or scene, text-friendly darkened top and bottom letterbox bands, ultra-wide cinematic composition'
+};
+
+// ============================================================
+// CORE: BUILD CONSTRAINT BLOCK
+// Assembles all quiz answers into a professional constraint string
+// ============================================================
+function buildConstraintBlock(data) {
+    const parts = [];
+
+    if (data.mood && MOOD_KEYWORDS[data.mood]) {
+        parts.push(`MOOD & ATMOSPHERE: ${MOOD_KEYWORDS[data.mood]}`);
+    }
+    if (data.thumbnailStyle && STYLE_KEYWORDS[data.thumbnailStyle]) {
+        parts.push(`VISUAL STYLE: ${STYLE_KEYWORDS[data.thumbnailStyle]}`);
+    }
+    if (data.theme && THEME_KEYWORDS[data.theme]) {
+        parts.push(`COLOR THEME: ${THEME_KEYWORDS[data.theme]}`);
+    }
+    if (data.primaryColor && COLOR_KEYWORDS[data.primaryColor]) {
+        parts.push(`PRIMARY COLOR: ${COLOR_KEYWORDS[data.primaryColor]}`);
+    }
+    if (data.category && CATEGORY_KEYWORDS[data.category]) {
+        parts.push(`CONTENT CATEGORY: ${CATEGORY_KEYWORDS[data.category]}`);
+    }
+    if (data.thumbnailTemplate && TEMPLATE_COMPOSITIONS[data.thumbnailTemplate]) {
+        parts.push(`COMPOSITION TEMPLATE: ${TEMPLATE_COMPOSITIONS[data.thumbnailTemplate]}`);
+    }
+    if (data.includeText === 'Yes') {
+        const textKw = data.textStyle && TEXT_STYLE_KEYWORDS[data.textStyle]
+            ? TEXT_STYLE_KEYWORDS[data.textStyle]
+            : 'bold readable text';
+        parts.push(`TEXT TREATMENT: Leave negative space for title text overlay, ${textKw}`);
+    } else if (data.includeText === 'No') {
+        parts.push('TEXT TREATMENT: No text overlays, pure visual composition');
+    }
+    if (data.customPrompt && data.customPrompt.trim()) {
+        parts.push(`ADDITIONAL REQUIREMENTS: ${data.customPrompt}`);
+    }
+
+    return parts.join('\n');
+}
+
+// ============================================================
+// MAIN GENERATE ENDPOINT
+// ============================================================
+app.post('/api/generate', async (req, res) => {
+    try {
+        const {
+            description, style, mood, focus, theme, primaryColor,
+            includeText, textStyle, thumbnailStyle, thumbnailTemplate,
+            customPrompt
+        } = req.body;
+
+        // --- STAGE 1: Build the constraint block from quiz answers ---
+        const constraintBlock = buildConstraintBlock({
+            mood, thumbnailStyle: thumbnailStyle || style, theme,
+            primaryColor, category: focus, thumbnailTemplate,
+            includeText, textStyle, customPrompt
+        });
+
+        console.log('\n📋 Constraint Block:\n', constraintBlock);
+
+        // --- STAGE 2: Gemini acts as Prompt-Writing Assistant ---
+        // (mimics the OpenAI "Prompt Bakery" role without needing OpenAI)
+        console.log('\n🧠 Stage 2: Gemini 2.5 Flash enhancing prompt...');
+        const textModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        const metaPrompt = `You are an expert YouTube thumbnail art director and AI image prompt engineer.
+
+A creator wants a YouTube thumbnail for: "${description}"
+
+Apply these MANDATORY visual constraints to your prompt:
+${constraintBlock}
+
+TASK: Write a single, highly detailed, professional image generation prompt (50-80 words) that:
+1. Incorporates ALL the above constraints naturally
+2. Uses specific cinematography and design terminology
+3. Ensures the composition is optimized for a 16:9 YouTube thumbnail
+4. Creates a visually striking result that maximizes click-through rate
+5. Is formatted as ONE continuous paragraph
+
+OUTPUT: Only the final image prompt. No labels, no explanations, no markdown.`;
+
+        const genResult = await textModel.generateContent(metaPrompt);
+        const finalPrompt = genResult.response.text().trim();
+
+        console.log('\n✨ Final Enhanced Prompt:\n', finalPrompt);
+
+        // --- STAGE 3: Image Generation ---
+        let imageUrl = '';
+        const fileName = `thumbnail_${Date.now()}.png`;
+        const filePath = path.join(uploadsDir, fileName);
+
+        try {
+            console.log('\n🎨 Generating image with Imagen 4 Ultra...');
+            const imgResponse = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-ultra-generate-001:predict?key=${process.env.GEMINI_API_KEY}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        instances: [{ prompt: finalPrompt }],
+                        parameters: { sampleCount: 1, aspectRatio: '16:9' }
+                    })
+                }
+            );
+
+            const imgData = await imgResponse.json();
+            if (!imgResponse.ok) throw new Error(imgData.error?.message || 'Imagen API error');
+
+            const base64Image = imgData.predictions[0].bytesBase64Encoded;
+            fs.writeFileSync(filePath, Buffer.from(base64Image, 'base64'));
+            imageUrl = `http://localhost:${process.env.PORT || 5000}/images/${fileName}`;
+            console.log('✅ Imagen 4 Ultra success!');
+
+        } catch (imgError) {
+            console.warn('\n⚠️  Imagen 4 Ultra failed — falling back to Pollinations AI');
+            console.warn('   Reason:', imgError.message);
+
+            const encoded = encodeURIComponent(finalPrompt);
+            const fallback = await fetch(
+                `https://image.pollinations.ai/prompt/${encoded}?width=1280&height=720&nologo=true&seed=${Date.now()}`
+            );
+            if (!fallback.ok) throw new Error('Both Imagen and Pollinations failed');
+            const buf = await fallback.arrayBuffer();
+            fs.writeFileSync(filePath, Buffer.from(buf));
+            imageUrl = `http://localhost:${process.env.PORT || 5000}/images/${fileName}`;
+            console.log('✅ Pollinations fallback success!');
+        }
+
+        // --- Save to local DB ---
+        const db = fs.readJsonSync(dbFile);
+        const newEntry = {
+            id: Date.now().toString(),
+            description,
+            style: thumbnailStyle || style,
+            mood,
+            focus,
+            theme,
+            primaryColor,
+            thumbnailTemplate,
+            includeText,
+            textStyle,
+            constraintBlock,
+            prompt: finalPrompt,
+            imageUrl,
+            createdAt: new Date().toISOString()
+        };
+        db.unshift(newEntry);
+        fs.writeJsonSync(dbFile, db);
+
+        res.json(newEntry);
+    } catch (error) {
+        console.error('\n❌ Fatal error:', error.message);
+        res.status(500).json({ error: 'Failed to process request: ' + error.message });
+    }
+});
+
+app.get('/api/history', (req, res) => {
+    try {
+        res.json(fs.readJsonSync(dbFile));
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to fetch history' });
+    }
+});
+
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`\n🚀 ThumbCraft Backend running on http://localhost:${PORT}`);
+    console.log('📁 Images stored at:', uploadsDir);
+    console.log('🧠 Using: Gemini 2.5 Flash (Prompt Enhancer) + Imagen 4 Ultra (Image Gen)\n');
+});
