@@ -173,7 +173,7 @@ Output:
 Only return the final image generation prompt. Do not include explanations.`;
 
     const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.0-flash',
         contents: `User Input:\n${userInputBlock}`,
         config: {
             systemInstruction,
@@ -190,28 +190,24 @@ Only return the final image generation prompt. Do not include explanations.`;
 // Model: gemini-3.1-flash-image-preview | 16:9 | 2K resolution
 // ============================================================
 async function generateThumbnailImage(prompt, filePath) {
-    const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-image-preview',
-        contents: prompt,
-        config: {
-            responseModalities: ['IMAGE'],
-            imageConfig: {
-                aspectRatio: '16:9',
-                imageSize: '2K'
-            }
+    const imgResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-ultra-generate-001:predict?key=${process.env.GEMINI_API_KEY}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                instances: [{ prompt: prompt }],
+                parameters: { sampleCount: 1, aspectRatio: '16:9' }
+            })
         }
-    });
+    );
 
-    // Extract the image inline data from the response
-    const parts = response.candidates[0].content.parts;
-    for (const part of parts) {
-        if (part.inlineData) {
-            const buffer = Buffer.from(part.inlineData.data, 'base64');
-            fs.writeFileSync(filePath, buffer);
-            return true;
-        }
-    }
-    throw new Error('Nano Banana 2 did not return an image in the response');
+    const imgData = await imgResponse.json();
+    if (!imgResponse.ok) throw new Error(imgData.error?.message || 'Imagen API error');
+
+    const base64Image = imgData.predictions[0].bytesBase64Encoded;
+    fs.writeFileSync(filePath, Buffer.from(base64Image, 'base64'));
+    return true;
 }
 
 // ============================================================
@@ -235,22 +231,22 @@ app.post('/api/generate', async (req, res) => {
 
         console.log('\n📋 Constraint Block:\n', constraintBlock);
 
-        // --- STAGE 2: Gemini 3 Flash generates the expert prompt ---
-        console.log('\n🧠 Stage 1: Gemini 3 Flash generating expert thumbnail prompt...');
+        // --- STAGE 2: Gemini 2.0 Flash generates the expert prompt ---
+        console.log('\n🧠 Stage 1: Gemini 2.0 Flash generating expert thumbnail prompt...');
         const cookedPrompt = await generateThumbnailPrompt(
             { description, style, thumbnailStyle, mood, focus, includeText, customPrompt },
             constraintBlock
         );
         console.log('\n✨ Expert Prompt:\n', cookedPrompt);
 
-        // --- STAGE 3: Nano Banana 2 generates the thumbnail image ---
-        console.log('\n🍌🍌 Stage 2: Nano Banana 2 generating thumbnail image...');
+        // --- STAGE 3: Imagen 4 Ultra generates the thumbnail image ---
+        console.log('\n🎨 Stage 2: Imagen 4 Ultra generating thumbnail image...');
         const fileName = `thumbnail_${Date.now()}.png`;
         const filePath = path.join(uploadsDir, fileName);
 
         await generateThumbnailImage(cookedPrompt, filePath);
         const imageUrl = `http://localhost:${process.env.PORT || 5000}/images/${fileName}`;
-        console.log('✅ Nano Banana 2 image generated successfully!');
+        console.log('✅ Imagen 4 Ultra image generated successfully!');
 
         // --- Save to local DB ---
         const db = fs.readJsonSync(dbFile);
@@ -295,6 +291,6 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`\n🚀 ThumbCraft Backend running on http://localhost:${PORT}`);
     console.log('📁 Images stored at:', uploadsDir);
-    console.log('🧠 Stage 1: Gemini 3 Flash  →  Expert thumbnail prompt');
-    console.log('🍌🍌 Stage 2: Nano Banana 2  →  16:9 2K YouTube thumbnail\n');
+    console.log('🧠 Stage 1: Gemini 2.0 Flash  →  Expert thumbnail prompt');
+    console.log('🎨 Stage 2: Imagen 4 Ultra  →  16:9 YouTube thumbnail\n');
 });
