@@ -4,13 +4,12 @@ import useImageStore from '../stores/imageStore';
 import { CheckCircle, Download, Plus, Eye, Loader2, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 
 const ResultsGrid = () => {
-  const { resetFlow, answers } = useUIStore();
+  const { resetFlow } = useUIStore();
   const { generatedImages, downloadImage, downloadAll, clearImages, isDownloadingZip, lastCookedPrompt } = useImageStore();
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [previewImg, setPreviewImg] = useState(null);
   const [briefExpanded, setBriefExpanded] = useState(true);
 
-  const count = parseInt(answers.imageCount) || 1;
   const imagesToShow = generatedImages.length > 0 ? generatedImages : [];
 
   const handleCreateNew = () => { clearImages(); resetFlow(); };
@@ -57,7 +56,7 @@ const ResultsGrid = () => {
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-purple-600" />
                 <span className="font-semibold text-purple-900 text-sm">AI Prompt Brief</span>
-                <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">Cooked by Gemini 1.5 Flash</span>
+                <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">GPT-4o-mini</span>
               </div>
               {briefExpanded
                 ? <ChevronUp className="w-4 h-4 text-purple-500" />
@@ -78,7 +77,7 @@ const ResultsGrid = () => {
         {imagesToShow.length === 0 ? (
           <div className="text-center py-20 text-gray-400">No images generated yet.</div>
         ) : (
-          <div className={`grid gap-6 ${count === 1 ? 'grid-cols-1 max-w-2xl mx-auto' : 'md:grid-cols-2'}`}>
+          <div className={`grid gap-6 ${imagesToShow.length === 1 ? 'grid-cols-1 max-w-2xl mx-auto' : 'md:grid-cols-2'}`}>
             {imagesToShow.map((imageUrl, index) => (
               <div
                 key={index}

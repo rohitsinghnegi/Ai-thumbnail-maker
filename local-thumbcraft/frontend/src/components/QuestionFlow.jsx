@@ -1,38 +1,30 @@
 import { useState } from 'react';
 import useUIStore from '../stores/uiStore';
-import useImageStore from '../stores/imageStore';
 import { ArrowLeft, ArrowRight, CheckCircle, Zap, Loader2, X, Layout } from 'lucide-react';
 
 const QuestionFlow = () => {
   const {
     currentQuestionIndex, questions, answers, prompt,
     setAnswer, removeAnswer, nextQuestion, previousQuestion,
-    setCurrentStep, startGeneration, resetFlow, completeGeneration
+    setCurrentStep, startGeneration, resetFlow
   } = useUIStore();
-  const { generateThumbnails } = useImageStore();
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   const currentQuestion = questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
   const currentAnswer = answers[currentQuestion.key];
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
 
-  const handleGenerate = async () => {
-    setIsGenerating(true);
-    startGeneration();
-    const result = await generateThumbnails(prompt, answers, null);
-    if (result.success) {
-      completeGeneration();
-    } else {
-      setIsGenerating(false);
-      setCurrentStep('input');
-      alert('Generation failed: ' + (result.error || 'Unknown error'));
-    }
+  // Only navigate to the loading screen — LoadingScreen fires the single API call
+  const handleGenerate = () => {
+    if (isNavigating) return; // prevent double-clicks
+    setIsNavigating(true);
+    startGeneration(); // transitions UI to 'loading' step
   };
 
-  const handleNext = async () => {
+  const handleNext = () => {
     if (isLastQuestion) {
-      await handleGenerate();
+      handleGenerate();
     } else {
       nextQuestion();
     }
@@ -95,7 +87,7 @@ const QuestionFlow = () => {
       <div className="max-w-3xl mx-auto">
         <button
           onClick={() => resetFlow()}
-          disabled={isGenerating}
+          disabled={isNavigating}
           className="flex items-center text-gray-600 hover:text-gray-900 mb-6 transition-colors disabled:opacity-50"
         >
           <ArrowLeft className="w-5 h-5 mr-2" /> Cancel
@@ -160,7 +152,7 @@ const QuestionFlow = () => {
             {currentQuestionIndex > 0 && (
               <button
                 onClick={previousQuestion}
-                disabled={isGenerating}
+                disabled={isNavigating}
                 className="flex items-center text-gray-600 hover:text-gray-900 font-medium px-4 py-2 rounded-lg disabled:opacity-50 transition-colors"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" /> Back
@@ -170,17 +162,17 @@ const QuestionFlow = () => {
           <div className="flex items-center space-x-3">
             <button
               onClick={handleGenerate}
-              disabled={isGenerating}
+              disabled={isNavigating}
               className="text-gray-500 hover:text-gray-700 font-medium px-4 py-2 rounded-lg disabled:opacity-50 transition-colors text-sm"
             >
               Skip & Generate
             </button>
             <button
               onClick={handleNext}
-              disabled={isGenerating}
+              disabled={isNavigating}
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center disabled:opacity-70 transition-colors shadow-md shadow-blue-100"
             >
-              {isGenerating ? (
+              {isNavigating ? (
                 <><Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" /> Generating...</>
               ) : isLastQuestion ? (
                 <>Generate <Zap className="w-4 h-4 ml-2" /></>
