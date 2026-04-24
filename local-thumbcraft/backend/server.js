@@ -191,7 +191,7 @@ Only return the final image generation prompt. Do not include explanations.`;
 // ============================================================
 async function generateThumbnailImage(prompt, filePath) {
     const imgResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-ultra-generate-001:predict?key=${process.env.GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:predict?key=${process.env.GEMINI_API_KEY}`,
         {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -292,5 +292,5 @@ app.listen(PORT, () => {
     console.log(`\n🚀 ThumbCraft Backend running on http://localhost:${PORT}`);
     console.log('📁 Images stored at:', uploadsDir);
     console.log('🧠 Stage 1: Gemini 2.0 Flash  →  Expert thumbnail prompt');
-    console.log('🎨 Stage 2: Imagen 4 Ultra  →  16:9 YouTube thumbnail\n');
+    console.log('🎨 Stage 2: Imagen 4 Fast  →  16:9 YouTube thumbnail\n');
 });
