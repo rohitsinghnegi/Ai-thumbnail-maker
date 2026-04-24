@@ -218,55 +218,26 @@ app.post('/api/generate', async (req, res) => {
         const fileName = `thumbnail_${Date.now()}.png`;
         const filePath = path.join(uploadsDir, fileName);
 
-        try {
-            console.log('\n🎨 Generating image with Imagen 4 Ultra...');
-            const imgResponse = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-ultra-generate-001:predict?key=${process.env.GEMINI_API_KEY}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        instances: [{ prompt: finalPrompt }],
-                        parameters: { sampleCount: 1, aspectRatio: '16:9' }
-                    })
-                }
-            );
-
-            const imgData = await imgResponse.json();
-            if (!imgResponse.ok) throw new Error(imgData.error?.message || 'Imagen API error');
-
-            const base64Image = imgData.predictions[0].bytesBase64Encoded;
-            fs.writeFileSync(filePath, Buffer.from(base64Image, 'base64'));
-            imageUrl = `http://localhost:${process.env.PORT || 5000}/images/${fileName}`;
-            console.log('✅ Imagen 4 Ultra success!');
-
-        } catch (imgError) {
-            console.warn('\n⚠️  Imagen 4 Ultra failed — falling back to Pollinations AI');
-            console.warn('   Reason:', imgError.message);
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
-            
-            const fallback = await fetch('https://image.pollinations.ai/', {
+        console.log('\n🎨 Generating image with Imagen 4 Ultra...');
+        const imgResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-ultra-generate-001:predict?key=${process.env.GEMINI_API_KEY}`,
+            {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    prompt: finalPrompt,
-                    width: 1280,
-                    height: 720,
-                    nologo: true,
-                    seed: Date.now()
-                }),
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            
-            if (!fallback.ok) throw new Error('Both Imagen and Pollinations failed');
-            const buf = await fallback.arrayBuffer();
-            fs.writeFileSync(filePath, Buffer.from(buf));
-            imageUrl = `http://localhost:${process.env.PORT || 5000}/images/${fileName}`;
-            console.log('✅ Pollinations fallback success!');
-        }
+                    instances: [{ prompt: finalPrompt }],
+                    parameters: { sampleCount: 1, aspectRatio: '16:9' }
+                })
+            }
+        );
+
+        const imgData = await imgResponse.json();
+        if (!imgResponse.ok) throw new Error(imgData.error?.message || 'Imagen API error');
+
+        const base64Image = imgData.predictions[0].bytesBase64Encoded;
+        fs.writeFileSync(filePath, Buffer.from(base64Image, 'base64'));
+        imageUrl = `http://localhost:${process.env.PORT || 5000}/images/${fileName}`;
+        console.log('✅ Imagen 4 Ultra success!');
 
         // --- Save to local DB ---
         const db = fs.readJsonSync(dbFile);
