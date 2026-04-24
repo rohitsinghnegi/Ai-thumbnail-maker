@@ -221,10 +221,23 @@ OUTPUT: Only the final image prompt. No labels, no explanations, no markdown.`;
             console.warn('\n⚠️  Imagen 4 Ultra failed — falling back to Pollinations AI');
             console.warn('   Reason:', imgError.message);
 
-            const encoded = encodeURIComponent(finalPrompt);
-            const fallback = await fetch(
-                `https://image.pollinations.ai/prompt/${encoded}?width=1280&height=720&nologo=true&seed=${Date.now()}`
-            );
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+            
+            const fallback = await fetch('https://image.pollinations.ai/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: finalPrompt,
+                    width: 1280,
+                    height: 720,
+                    nologo: true,
+                    seed: Date.now()
+                }),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
             if (!fallback.ok) throw new Error('Both Imagen and Pollinations failed');
             const buf = await fallback.arrayBuffer();
             fs.writeFileSync(filePath, Buffer.from(buf));
