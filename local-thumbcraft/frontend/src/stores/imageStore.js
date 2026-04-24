@@ -4,6 +4,8 @@ const API_BASE = 'http://localhost:5000/api';
 
 const useImageStore = create((set, get) => ({
   generatedImages: [],
+  lastResults: [],      // full API response objects (includes cookedPrompt)
+  lastCookedPrompt: '', // the most recent cooked prompt for display
   history: [],
   isLoading: false,
   isDownloadingZip: false,
@@ -14,6 +16,7 @@ const useImageStore = create((set, get) => ({
     try {
       const count = parseInt(answers.imageCount) || 1;
       const results = [];
+      const resultObjects = [];
 
       for (let i = 0; i < count; i++) {
         const res = await fetch(`${API_BASE}/generate`, {
@@ -37,13 +40,19 @@ const useImageStore = create((set, get) => ({
         const data = await res.json();
         if (res.ok && data.imageUrl) {
           results.push(data.imageUrl);
+          resultObjects.push(data); // store full response with cookedPrompt
         } else {
           throw new Error(data.error || 'Generation failed');
         }
       }
 
-      set({ generatedImages: results, isLoading: false });
-      return { success: true, images: results };
+      // Use the last result's cookedPrompt for display
+      const lastCookedPrompt = resultObjects.length > 0
+        ? (resultObjects[resultObjects.length - 1].cookedPrompt || '')
+        : '';
+
+      set({ generatedImages: results, lastResults: resultObjects, lastCookedPrompt, isLoading: false });
+      return { success: true, images: results, cookedPrompt: lastCookedPrompt };
     } catch (err) {
       set({ isLoading: false, error: err.message });
       return { success: false, error: err.message };
@@ -97,7 +106,7 @@ const useImageStore = create((set, get) => ({
     }
   },
 
-  clearImages: () => set({ generatedImages: [] }),
+  clearImages: () => set({ generatedImages: [], lastResults: [], lastCookedPrompt: '' }),
 }));
 
 export default useImageStore;

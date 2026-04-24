@@ -105,6 +105,43 @@ const TEMPLATE_COMPOSITIONS = {
 };
 
 // ============================================================
+// HARDCODED NEGATIVE PROMPT — appended to every generation
+// Prevents the most common AI image failure modes
+// ============================================================
+const NEGATIVE_PROMPT = 'blurry, distorted faces, low resolution, messy text, grainy, watermark, duplicate subjects, deformed hands, bad anatomy, ugly, disfigured, noisy, oversaturated, low quality, jpeg artifacts';
+
+// ============================================================
+// PROMPT COOKER — "Creative Director" LLM step
+// Uses a fast text model to expand raw user input into a
+// professional visual brief before hitting the image model
+// ============================================================
+async function cookPrompt(userData, constraintBlock) {
+    const cookerModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const chefInstruction = `You are a professional YouTube Thumbnail Designer and AI image prompt engineer.
+Your job is to take a simple user description and style choices, then expand them into a highly descriptive visual prompt for an image generator.
+
+User Input:
+- Topic: ${userData.description}
+- Style: ${userData.thumbnailStyle || userData.style || 'Photo-realistic'}
+- Mood: ${userData.mood || 'Professional'}
+- Focus/Category: ${userData.focus || 'General'}
+
+Apply these visual constraints:
+${constraintBlock}
+
+Rules:
+1. Focus on lighting, camera angles, textures, and composition — use concrete cinematography terms.
+2. CRITICAL: Do NOT describe or include any text, words, letters, numbers, or typography in the image. Focus ONLY on the background scene and visual elements.
+3. Always end with: 16:9 aspect ratio, 8K ultra HD, cinematic render.
+4. Keep it under 70 words.
+5. Output ONLY the expanded prompt. No labels, no explanations, no markdown.`;
+
+    const result = await cookerModel.generateContent(chefInstruction);
+    return result.response.text().trim();
+}
+
+// ============================================================
 // CORE: BUILD CONSTRAINT BLOCK
 // Assembles all quiz answers into a professional constraint string
 // ============================================================
@@ -164,31 +201,17 @@ app.post('/api/generate', async (req, res) => {
 
         console.log('\n📋 Constraint Block:\n', constraintBlock);
 
-        // --- STAGE 2: Gemini acts as Prompt-Writing Assistant ---
-        // (mimics the OpenAI "Prompt Bakery" role without needing OpenAI)
-        console.log('\n🧠 Stage 2: Gemini 2.5 Flash enhancing prompt...');
-        const textModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        // --- STAGE 2: Prompt Cooker — Creative Director LLM step ---
+        console.log('\n🍳 Stage 2: Cooking prompt with Gemini 1.5 Flash...');
+        const cookedPrompt = await cookPrompt(
+            { description, style, thumbnailStyle, mood, focus },
+            constraintBlock
+        );
+        console.log('\n✨ Cooked Prompt:\n', cookedPrompt);
 
-        const metaPrompt = `You are an expert YouTube thumbnail art director and AI image prompt engineer.
-
-A creator wants a YouTube thumbnail for: "${description}"
-
-Apply these MANDATORY visual constraints to your prompt:
-${constraintBlock}
-
-TASK: Write a single, highly detailed, professional image generation prompt (50-80 words) that:
-1. Incorporates ALL the above constraints naturally
-2. Uses specific cinematography and design terminology
-3. Ensures the composition is optimized for a 16:9 YouTube thumbnail
-4. Creates a visually striking result that maximizes click-through rate
-5. Is formatted as ONE continuous paragraph
-
-OUTPUT: Only the final image prompt. No labels, no explanations, no markdown.`;
-
-        const genResult = await textModel.generateContent(metaPrompt);
-        const finalPrompt = genResult.response.text().trim();
-
-        console.log('\n✨ Final Enhanced Prompt:\n', finalPrompt);
+        // Append hardcoded negative prompt as suffix hint for image models that support it
+        const finalPrompt = `${cookedPrompt} --negative: ${NEGATIVE_PROMPT}`;
+        console.log('\n🚀 Final Prompt (with negative):\n', finalPrompt);
 
         // --- STAGE 3: Image Generation ---
         let imageUrl = '';
@@ -259,7 +282,8 @@ OUTPUT: Only the final image prompt. No labels, no explanations, no markdown.`;
             includeText,
             textStyle,
             constraintBlock,
-            prompt: finalPrompt,
+            cookedPrompt,          // ← the creative director's brief
+            prompt: finalPrompt,   // ← final prompt sent to image model
             imageUrl,
             createdAt: new Date().toISOString()
         };
@@ -287,5 +311,5 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`\n🚀 ThumbCraft Backend running on http://localhost:${PORT}`);
     console.log('📁 Images stored at:', uploadsDir);
-    console.log('🧠 Using: Gemini 2.5 Flash (Prompt Enhancer) + Imagen 4 Ultra (Image Gen)\n');
+    console.log('🍳 Using: Gemini 1.5 Flash (Prompt Cooker) → Imagen 4 Ultra (Image Gen)\n');
 });

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import useUIStore from '../stores/uiStore';
 import useImageStore from '../stores/imageStore';
-import { CheckCircle, Download, Plus, Eye, Loader2 } from 'lucide-react';
+import { CheckCircle, Download, Plus, Eye, Loader2, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 
 const ResultsGrid = () => {
   const { resetFlow, answers } = useUIStore();
-  const { generatedImages, downloadImage, downloadAll, clearImages, isDownloadingZip } = useImageStore();
+  const { generatedImages, downloadImage, downloadAll, clearImages, isDownloadingZip, lastCookedPrompt } = useImageStore();
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [previewImg, setPreviewImg] = useState(null);
+  const [briefExpanded, setBriefExpanded] = useState(true);
 
   const count = parseInt(answers.imageCount) || 1;
   const imagesToShow = generatedImages.length > 0 ? generatedImages : [];
@@ -45,6 +46,33 @@ const ResultsGrid = () => {
             <Plus className="w-5 h-5 mr-2" /> Create New Thumbnails
           </button>
         </div>
+
+        {/* AI Prompt Brief Card */}
+        {lastCookedPrompt && (
+          <div className="mb-8 rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50 overflow-hidden shadow-sm">
+            <button
+              onClick={() => setBriefExpanded(v => !v)}
+              className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-purple-100/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-600" />
+                <span className="font-semibold text-purple-900 text-sm">AI Prompt Brief</span>
+                <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">Cooked by Gemini 1.5 Flash</span>
+              </div>
+              {briefExpanded
+                ? <ChevronUp className="w-4 h-4 text-purple-500" />
+                : <ChevronDown className="w-4 h-4 text-purple-500" />}
+            </button>
+            {briefExpanded && (
+              <div className="px-5 pb-5">
+                <div className="bg-white/80 rounded-xl border border-purple-100 px-4 py-3 font-mono text-sm text-gray-700 leading-relaxed">
+                  &ldquo;{lastCookedPrompt}&rdquo;
+                </div>
+                <p className="text-xs text-purple-500 mt-2 pl-1">This is the visual brief the AI used to generate your thumbnail. Better inputs = better output 🎯</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Grid */}
         {imagesToShow.length === 0 ? (
