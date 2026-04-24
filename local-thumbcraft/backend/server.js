@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 const fs = require('fs-extra');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
-const OpenAI = require('openai');
+const Groq = require('groq-sdk');
 
 dotenv.config();
 
@@ -13,8 +13,8 @@ if (!process.env.GEMINI_API_KEY) {
     console.error('❌ GEMINI_API_KEY is missing from .env — server cannot start.');
     process.exit(1);
 }
-if (!process.env.OPENAI_API_KEY) {
-    console.error('❌ OPENAI_API_KEY is missing from .env — server cannot start.');
+if (!process.env.GROQ_API_KEY) {
+    console.error('❌ GROQ_API_KEY is missing from .env — server cannot start.');
     process.exit(1);
 }
 
@@ -30,7 +30,7 @@ const dbFile = path.join(__dirname, 'db.json');
 if (!fs.existsSync(dbFile)) fs.writeJsonSync(dbFile, []);
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // ─── In-flight guard: prevent duplicate concurrent requests ─────────────────
 let isGenerating = false;
@@ -131,8 +131,8 @@ function buildConstraintBlock(data) {
 }
 
 // ============================================================
-// STAGE 1: GPT-4o-mini (OpenAI) — Generate expert Imagen prompt
-// Fast, cheap, and excellent at following design instructions
+// STAGE 1: Groq (llama-3.3-70b-versatile) — Generate expert Imagen prompt
+// Ultra-fast inference (~0.3s), free tier, excellent instruction-following
 // ============================================================
 async function generateThumbnailPrompt(topic, constraintBlock) {
     const userMsg = `Topic: ${topic}${constraintBlock ? '\nConstraints: ' + constraintBlock : ''}`;
@@ -141,8 +141,8 @@ async function generateThumbnailPrompt(topic, constraintBlock) {
         'You are a YouTube thumbnail prompt engineer for Imagen 4. Output ONLY the final image-gen prompt — no labels, preamble, or explanation.\n' +
         'Rules: max 80 words | 16:9 aspect | describe subject (exaggerated expression if human), background, lighting (dramatic high-contrast), composition, dominant colours, any FX/icons | prioritise CTR — bold, eye-catching, emotionally charged | match requested style exactly.';
 
-    const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+    const response = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
         messages: [
             { role: 'system', content: systemInstruction },
             { role: 'user',   content: userMsg }
@@ -226,7 +226,7 @@ app.post('/api/generate', async (req, res) => {
         console.log('\n📋 Constraints:', constraintBlock || '(none)');
 
         // Stage 1 — generate expert prompt
-        console.log('\n🧠 Stage 1: GPT-4o-mini generating prompt...');
+        console.log('\n🧠 Stage 1: Groq llama-3.3-70b generating prompt...');
         const cookedPrompt = await generateThumbnailPrompt(description.trim(), constraintBlock);
         console.log('\n✨ Expert prompt:', cookedPrompt);
 
@@ -287,6 +287,6 @@ app.get('/api/health', (_req, res) =>
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`\n🚀 ThumbCraft Backend on http://localhost:${PORT}`);
-    console.log('🧠 Stage 1: GPT-4o-mini (OpenAI)  →  Expert prompt');
-    console.log('🎨 Stage 2: Imagen 4 Fast (Gemini) →  16:9 thumbnail\n');
+    console.log('🧠 Stage 1: Groq llama-3.3-70b-versatile  →  Expert prompt');
+    console.log('🎨 Stage 2: Imagen 4 Fast (Gemini)          →  16:9 thumbnail\n');
 });

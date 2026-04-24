@@ -56,7 +56,7 @@ const ResultsGrid = () => {
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-purple-600" />
                 <span className="font-semibold text-purple-900 text-sm">AI Prompt Brief</span>
-                <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">GPT-4o-mini</span>
+                <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">Groq Llama 3.3</span>
               </div>
               {briefExpanded
                 ? <ChevronUp className="w-4 h-4 text-purple-500" />
