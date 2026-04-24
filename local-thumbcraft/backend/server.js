@@ -3,7 +3,9 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const fs = require('fs-extra');
 const path = require('path');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+// New Gen AI SDK — required for Nano Banana 2 image generation
+const { GoogleGenAI } = require('@google/genai');
 
 dotenv.config();
 
@@ -18,10 +20,11 @@ app.use('/images', express.static(uploadsDir));
 const dbFile = path.join(__dirname, 'db.json');
 if (!fs.existsSync(dbFile)) fs.writeJsonSync(dbFile, []);
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Single client for both models (uses GEMINI_API_KEY env var automatically)
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // ============================================================
-// STAGE 1: VISUAL CONSTRAINT DICTIONARY
+// VISUAL CONSTRAINT DICTIONARY
 // Maps quiz answers → professional cinematography / design keywords
 // ============================================================
 const MOOD_KEYWORDS = {
@@ -80,11 +83,6 @@ const TEXT_STYLE_KEYWORDS = {
     'Gradient': 'gradient fill typography, color-flow text, iridescent shimmering letters'
 };
 
-// ============================================================
-// STAGE 2: VISUAL TEMPLATE COMPOSITION GUIDE
-// Tells the AI exactly WHERE to place subjects and where to leave
-// negative space for text — critical for functional thumbnails
-// ============================================================
 const TEMPLATE_COMPOSITIONS = {
     'Face Close-Up':
         'extreme close-up portrait shot, subject face fills 70% of frame on right side, strong emotional expression, left third left clear for text overlay, shallow depth of field background',
@@ -105,84 +103,120 @@ const TEMPLATE_COMPOSITIONS = {
 };
 
 // ============================================================
-// HARDCODED NEGATIVE PROMPT — appended to every generation
-// Prevents the most common AI image failure modes
-// ============================================================
-const NEGATIVE_PROMPT = 'blurry, distorted faces, low resolution, messy text, grainy, watermark, duplicate subjects, deformed hands, bad anatomy, ugly, disfigured, noisy, oversaturated, low quality, jpeg artifacts';
-
-// ============================================================
-// PROMPT COOKER — "Creative Director" LLM step
-// Uses a fast text model to expand raw user input into a
-// professional visual brief before hitting the image model
-// ============================================================
-async function cookPrompt(userData, constraintBlock) {
-    const cookerModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-    const chefInstruction = `You are a professional YouTube Thumbnail Designer and AI image prompt engineer.
-Your job is to take a simple user description and style choices, then expand them into a highly descriptive visual prompt for an image generator.
-
-User Input:
-- Topic: ${userData.description}
-- Style: ${userData.thumbnailStyle || userData.style || 'Photo-realistic'}
-- Mood: ${userData.mood || 'Professional'}
-- Focus/Category: ${userData.focus || 'General'}
-
-Apply these visual constraints:
-${constraintBlock}
-
-Rules:
-1. Focus on lighting, camera angles, textures, and composition — use concrete cinematography terms.
-2. CRITICAL: Do NOT describe or include any text, words, letters, numbers, or typography in the image. Focus ONLY on the background scene and visual elements.
-3. Always end with: 16:9 aspect ratio, 8K ultra HD, cinematic render.
-4. Keep it under 70 words.
-5. Output ONLY the expanded prompt. No labels, no explanations, no markdown.`;
-
-    const result = await cookerModel.generateContent(chefInstruction);
-    return result.response.text().trim();
-}
-
-// ============================================================
-// CORE: BUILD CONSTRAINT BLOCK
-// Assembles all quiz answers into a professional constraint string
+// BUILD CONSTRAINT BLOCK
+// Assembles all quiz answers into a structured context string
 // ============================================================
 function buildConstraintBlock(data) {
     const parts = [];
-
-    if (data.mood && MOOD_KEYWORDS[data.mood]) {
-        parts.push(`MOOD & ATMOSPHERE: ${MOOD_KEYWORDS[data.mood]}`);
-    }
-    if (data.thumbnailStyle && STYLE_KEYWORDS[data.thumbnailStyle]) {
-        parts.push(`VISUAL STYLE: ${STYLE_KEYWORDS[data.thumbnailStyle]}`);
-    }
-    if (data.theme && THEME_KEYWORDS[data.theme]) {
-        parts.push(`COLOR THEME: ${THEME_KEYWORDS[data.theme]}`);
-    }
-    if (data.primaryColor && COLOR_KEYWORDS[data.primaryColor]) {
-        parts.push(`PRIMARY COLOR: ${COLOR_KEYWORDS[data.primaryColor]}`);
-    }
-    if (data.category && CATEGORY_KEYWORDS[data.category]) {
-        parts.push(`CONTENT CATEGORY: ${CATEGORY_KEYWORDS[data.category]}`);
-    }
-    if (data.thumbnailTemplate && TEMPLATE_COMPOSITIONS[data.thumbnailTemplate]) {
-        parts.push(`COMPOSITION TEMPLATE: ${TEMPLATE_COMPOSITIONS[data.thumbnailTemplate]}`);
-    }
+    if (data.mood && MOOD_KEYWORDS[data.mood])
+        parts.push(`Mood & Atmosphere: ${MOOD_KEYWORDS[data.mood]}`);
+    if (data.thumbnailStyle && STYLE_KEYWORDS[data.thumbnailStyle])
+        parts.push(`Visual Style: ${STYLE_KEYWORDS[data.thumbnailStyle]}`);
+    if (data.theme && THEME_KEYWORDS[data.theme])
+        parts.push(`Color Theme: ${THEME_KEYWORDS[data.theme]}`);
+    if (data.primaryColor && COLOR_KEYWORDS[data.primaryColor])
+        parts.push(`Primary Color: ${COLOR_KEYWORDS[data.primaryColor]}`);
+    if (data.category && CATEGORY_KEYWORDS[data.category])
+        parts.push(`Content Category: ${CATEGORY_KEYWORDS[data.category]}`);
+    if (data.thumbnailTemplate && TEMPLATE_COMPOSITIONS[data.thumbnailTemplate])
+        parts.push(`Composition Template: ${TEMPLATE_COMPOSITIONS[data.thumbnailTemplate]}`);
     if (data.includeText === 'Yes') {
         const textKw = data.textStyle && TEXT_STYLE_KEYWORDS[data.textStyle]
             ? TEXT_STYLE_KEYWORDS[data.textStyle]
             : 'bold readable text';
-        parts.push(`TEXT TREATMENT: Leave negative space for title text overlay, ${textKw}`);
+        parts.push(`Text Treatment: Leave negative space for title text overlay, ${textKw}`);
     } else if (data.includeText === 'No') {
-        parts.push('TEXT TREATMENT: No text overlays, pure visual composition');
+        parts.push('Text Treatment: No text overlays, pure visual composition');
     }
-    if (data.customPrompt && data.customPrompt.trim()) {
-        parts.push(`ADDITIONAL REQUIREMENTS: ${data.customPrompt}`);
-    }
-
+    if (data.customPrompt && data.customPrompt.trim())
+        parts.push(`Additional Requirements: ${data.customPrompt}`);
     return parts.join('\n');
 }
 
 // ============================================================
+// STAGE 1: GEMINI 3 FLASH — Expert YouTube Thumbnail Prompt Writer
+// Uses the exact system instruction provided for maximum CTR
+// ============================================================
+async function generateThumbnailPrompt(userData, constraintBlock) {
+    // Build the structured user input block for the model
+    const userInputBlock = `
+Topic: ${userData.description || 'General content'}
+Target Audience: ${userData.focus || 'General audience'}
+Emotion/Hook: ${userData.mood || 'Professional'}
+Text on Thumbnail: ${userData.includeText === 'Yes' ? (userData.customPrompt || 'relevant title text') : 'none'}
+Style: ${userData.thumbnailStyle || userData.style || 'Photo-realistic'}
+
+Additional context from user preferences:
+${constraintBlock || 'No additional constraints'}`.trim();
+
+    const systemInstruction = `You are an expert YouTube thumbnail designer and visual marketing specialist.
+
+Your task is to convert user input into a highly optimized, click-worthy image generation prompt for a YouTube thumbnail.
+
+Instructions:
+- Create a single, detailed prompt for an AI image generator.
+- Focus on high CTR (click-through rate) design principles.
+- Clearly describe:
+  - Main subject (person/object)
+  - Facial expression (if human, make it exaggerated and emotional)
+  - Background (clean but eye-catching)
+  - Lighting (dramatic, high contrast)
+  - Composition (close-up, centered subject, rule of thirds if needed)
+  - Colors (vibrant, contrasting, attention-grabbing)
+  - Visual elements (arrows, glow, fire, money, icons if relevant)
+- If text is provided, integrate it naturally into the thumbnail design.
+- Match the style (e.g., MrBeast, cinematic, minimal, tech, finance, etc.)
+- Keep the prompt concise but powerful (max 120 words).
+- Avoid unnecessary complexity; prioritize clarity and impact.
+
+Output:
+Only return the final image generation prompt. Do not include explanations.`;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `User Input:\n${userInputBlock}`,
+        config: {
+            systemInstruction,
+            temperature: 0.8,
+            maxOutputTokens: 300
+        }
+    });
+
+    return response.candidates[0].content.parts[0].text.trim();
+}
+
+// ============================================================
+// STAGE 2: NANO BANANA 2 — High-quality YouTube Thumbnail Image
+// Model: gemini-3.1-flash-image-preview | 16:9 | 2K resolution
+// ============================================================
+async function generateThumbnailImage(prompt, filePath) {
+    const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-image-preview',
+        contents: prompt,
+        config: {
+            responseModalities: ['IMAGE'],
+            imageConfig: {
+                aspectRatio: '16:9',
+                imageSize: '2K'
+            }
+        }
+    });
+
+    // Extract the image inline data from the response
+    const parts = response.candidates[0].content.parts;
+    for (const part of parts) {
+        if (part.inlineData) {
+            const buffer = Buffer.from(part.inlineData.data, 'base64');
+            fs.writeFileSync(filePath, buffer);
+            return true;
+        }
+    }
+    throw new Error('Nano Banana 2 did not return an image in the response');
+}
+
+// ============================================================
 // MAIN GENERATE ENDPOINT
+// Flow: Quiz answers → Gemini 3 Flash prompt → Nano Banana 2 image
 // ============================================================
 app.post('/api/generate', async (req, res) => {
     try {
@@ -192,7 +226,7 @@ app.post('/api/generate', async (req, res) => {
             customPrompt
         } = req.body;
 
-        // --- STAGE 1: Build the constraint block from quiz answers ---
+        // --- STAGE 1: Build constraint block from quiz answers ---
         const constraintBlock = buildConstraintBlock({
             mood, thumbnailStyle: thumbnailStyle || style, theme,
             primaryColor, category: focus, thumbnailTemplate,
@@ -201,43 +235,22 @@ app.post('/api/generate', async (req, res) => {
 
         console.log('\n📋 Constraint Block:\n', constraintBlock);
 
-        // --- STAGE 2: Prompt Cooker — Creative Director LLM step ---
-        console.log('\n🍳 Stage 2: Cooking prompt with Gemini 1.5 Flash...');
-        const cookedPrompt = await cookPrompt(
-            { description, style, thumbnailStyle, mood, focus },
+        // --- STAGE 2: Gemini 3 Flash generates the expert prompt ---
+        console.log('\n🧠 Stage 1: Gemini 3 Flash generating expert thumbnail prompt...');
+        const cookedPrompt = await generateThumbnailPrompt(
+            { description, style, thumbnailStyle, mood, focus, includeText, customPrompt },
             constraintBlock
         );
-        console.log('\n✨ Cooked Prompt:\n', cookedPrompt);
+        console.log('\n✨ Expert Prompt:\n', cookedPrompt);
 
-        // Append hardcoded negative prompt as suffix hint for image models that support it
-        const finalPrompt = `${cookedPrompt} --negative: ${NEGATIVE_PROMPT}`;
-        console.log('\n🚀 Final Prompt (with negative):\n', finalPrompt);
-
-        // --- STAGE 3: Image Generation ---
-        let imageUrl = '';
+        // --- STAGE 3: Nano Banana 2 generates the thumbnail image ---
+        console.log('\n🍌🍌 Stage 2: Nano Banana 2 generating thumbnail image...');
         const fileName = `thumbnail_${Date.now()}.png`;
         const filePath = path.join(uploadsDir, fileName);
 
-        console.log('\n🎨 Generating image with Imagen 4 Ultra...');
-        const imgResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-ultra-generate-001:predict?key=${process.env.GEMINI_API_KEY}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    instances: [{ prompt: finalPrompt }],
-                    parameters: { sampleCount: 1, aspectRatio: '16:9' }
-                })
-            }
-        );
-
-        const imgData = await imgResponse.json();
-        if (!imgResponse.ok) throw new Error(imgData.error?.message || 'Imagen API error');
-
-        const base64Image = imgData.predictions[0].bytesBase64Encoded;
-        fs.writeFileSync(filePath, Buffer.from(base64Image, 'base64'));
-        imageUrl = `http://localhost:${process.env.PORT || 5000}/images/${fileName}`;
-        console.log('✅ Imagen 4 Ultra success!');
+        await generateThumbnailImage(cookedPrompt, filePath);
+        const imageUrl = `http://localhost:${process.env.PORT || 5000}/images/${fileName}`;
+        console.log('✅ Nano Banana 2 image generated successfully!');
 
         // --- Save to local DB ---
         const db = fs.readJsonSync(dbFile);
@@ -253,13 +266,13 @@ app.post('/api/generate', async (req, res) => {
             includeText,
             textStyle,
             constraintBlock,
-            cookedPrompt,          // ← the creative director's brief
-            prompt: finalPrompt,   // ← final prompt sent to image model
+            cookedPrompt,        // ← expert prompt from Gemini 3 Flash
+            prompt: cookedPrompt, // ← same prompt sent to Nano Banana 2
             imageUrl,
             createdAt: new Date().toISOString()
         };
         db.unshift(newEntry);
-        fs.writeJsonSync(dbFile, db);
+        fs.writeJsonSync(dbFile, newEntry);
 
         res.json(newEntry);
     } catch (error) {
@@ -282,5 +295,6 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`\n🚀 ThumbCraft Backend running on http://localhost:${PORT}`);
     console.log('📁 Images stored at:', uploadsDir);
-    console.log('🍳 Using: Gemini 1.5 Flash (Prompt Cooker) → Imagen 4 Ultra (Image Gen)\n');
+    console.log('🧠 Stage 1: Gemini 3 Flash  →  Expert thumbnail prompt');
+    console.log('🍌🍌 Stage 2: Nano Banana 2  →  16:9 2K YouTube thumbnail\n');
 });
