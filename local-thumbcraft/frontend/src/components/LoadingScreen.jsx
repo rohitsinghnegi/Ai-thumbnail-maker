@@ -1,24 +1,37 @@
 import { useEffect, useState, useRef } from 'react';
 import useUIStore from '../stores/uiStore';
 import useImageStore from '../stores/imageStore';
-import { Loader2, Info } from 'lucide-react';
+import { Loader2, Info, User } from 'lucide-react';
 
 const LoadingScreen = () => {
-  const { prompt, answers, completeGeneration, startGeneration } = useUIStore();
-  const { generateThumbnails } = useImageStore();
-  const [loadingText, setLoadingText] = useState('Analyzing your prompt...');
+  const { prompt, answers, facePhoto, completeGeneration } = useUIStore();
+  const { generateThumbnails, generateThumbnailsWithFace } = useImageStore();
+  const [loadingText, setLoadingText] = useState(
+    facePhoto ? 'Detecting face identity...' : 'Analyzing your prompt...'
+  );
   const [progress, setProgress] = useState(5);
   const [isTextVisible, setIsTextVisible] = useState(true);
   const hasGenerated = useRef(false);
 
-  const steps = [
+  const faceSteps = [
+    'Detecting face identity...',
+    'Extracting facial landmarks...',
+    'Generating creative concept...',
+    'Applying style preferences...',
+    'Merging face with thumbnail scene...',
+    'Finalizing identity-preserved thumbnail...',
+  ];
+
+  const standardSteps = [
     'Analyzing your prompt...',
     'Generating creative concepts...',
     'Applying style preferences...',
     'Rendering thumbnails...',
     'Optimizing for YouTube...',
-    'Finalizing your thumbnails...'
+    'Finalizing your thumbnails...',
   ];
+
+  const steps = facePhoto ? faceSteps : standardSteps;
 
   useEffect(() => {
     let currentStep = 0;
@@ -41,7 +54,10 @@ const LoadingScreen = () => {
     hasGenerated.current = true;
 
     const go = async () => {
-      const result = await generateThumbnails(prompt, answers, null);
+      const result = facePhoto
+        ? await generateThumbnailsWithFace(prompt, answers, facePhoto)
+        : await generateThumbnails(prompt, answers);
+
       if (result && result.success) {
         setProgress(100);
         setTimeout(() => completeGeneration(), 800);

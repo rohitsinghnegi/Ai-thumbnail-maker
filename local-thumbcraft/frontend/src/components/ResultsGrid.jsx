@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import useUIStore from '../stores/uiStore';
 import useImageStore from '../stores/imageStore';
-import { CheckCircle, Download, Plus, Eye, Loader2, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, Download, Plus, Eye, Loader2, Sparkles, ChevronDown, ChevronUp, User } from 'lucide-react';
 
 const ResultsGrid = () => {
-  const { resetFlow } = useUIStore();
+  const { resetFlow, facePhoto } = useUIStore();
   const { generatedImages, downloadImage, downloadAll, clearImages, isDownloadingZip, lastCookedPrompt } = useImageStore();
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [previewImg, setPreviewImg] = useState(null);
@@ -56,7 +56,13 @@ const ResultsGrid = () => {
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-purple-600" />
                 <span className="font-semibold text-purple-900 text-sm">AI Prompt Brief</span>
-                <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">Groq Llama 3.3</span>
+                {facePhoto ? (
+                  <span className="text-xs bg-violet-200 text-violet-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <User className="w-3 h-3" /> InstantID · Face Preserved
+                  </span>
+                ) : (
+                  <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full">Groq Llama 3.3</span>
+                )}
               </div>
               {briefExpanded
                 ? <ChevronUp className="w-4 h-4 text-purple-500" />
@@ -107,8 +113,13 @@ const ResultsGrid = () => {
                       <Download className="w-4 h-4 mr-2" /> Download
                     </button>
                   </div>
-                  <div className="absolute top-3 left-3">
+                  <div className="absolute top-3 left-3 flex gap-2">
                     <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">HD Quality</span>
+                    {facePhoto && (
+                      <span className="bg-violet-600 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                        <User className="w-3 h-3" /> Your Face
+                      </span>
+                    )}
                   </div>
                   <div className="absolute top-3 right-3">
                     <span className="bg-white/90 text-gray-900 text-sm font-bold w-8 h-8 rounded-full flex items-center justify-center shadow">{index + 1}</span>

@@ -9,7 +9,7 @@ const PromptInput = () => {
   const handleNext = () => {
     if (!prompt.trim()) { setError('Please enter a description for your thumbnail'); return; }
     setError('');
-    setCurrentStep('questions');
+    setCurrentStep('photo');   // → photo upload step first, then questions
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 

@@ -52,6 +52,51 @@ const useImageStore = create((set) => ({
     }
   },
 
+  // Face-preserving generation via Replicate InstantID
+  generateThumbnailsWithFace: async (prompt, answers, photoFile) => {
+    set({ isLoading: true, error: null, generatedImages: [], lastCookedPrompt: '' });
+    try {
+      const form = new FormData();
+      form.append('photo', photoFile);
+      form.append('description', prompt);
+      form.append('style', answers.thumbnailStyle || 'Photo-realistic');
+      form.append('mood', answers.mood || '');
+      form.append('category', answers.category || '');
+      form.append('theme', answers.theme || '');
+      form.append('primaryColor', answers.primaryColor || '');
+      form.append('thumbnailTemplate', answers.thumbnailTemplate || '');
+      form.append('includeText', answers.includeText || '');
+      form.append('textStyle', answers.textStyle || '');
+      form.append('customPrompt', answers.customPrompt || '');
+
+      // No Content-Type header — browser sets multipart boundary automatically
+      const res = await fetch(`${API_BASE}/generate-with-face`, {
+        method: 'POST',
+        body: form
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || `Server error ${res.status}`);
+      }
+      if (!data.imageUrl) {
+        throw new Error('Server returned no imageUrl');
+      }
+
+      set({
+        generatedImages: [data.imageUrl],
+        lastCookedPrompt: data.cookedPrompt || '',
+        isLoading: false
+      });
+      return { success: true, images: [data.imageUrl], cookedPrompt: data.cookedPrompt };
+
+    } catch (err) {
+      set({ isLoading: false, error: err.message });
+      return { success: false, error: err.message };
+    }
+  },
+
   fetchHistory: async () => {
     try {
       const res = await fetch(`${API_BASE}/history`);

@@ -6,6 +6,7 @@ const useUIStore = create((set, get) => ({
   prompt: '',
   isGenerating: false,     // FIX: was missing from initial state
   currentQuestionIndex: 0,
+  facePhoto: null,         // File object for InstantID face generation (null = standard mode)
   answers: {
     category: '',
     mood: '',
@@ -21,6 +22,8 @@ const useUIStore = create((set, get) => ({
   setCurrentStep: (step) => set({ currentStep: step }),
   setGenerationMode: (mode) => set({ generationMode: mode }),
   setPrompt: (prompt) => set({ prompt }),
+  setFacePhoto: (file) => set({ facePhoto: file }),
+  clearFacePhoto: () => set({ facePhoto: null }),
 
   setAnswer: (key, value) => set((state) => ({
     answers: { ...state.answers, [key]: value }
@@ -57,6 +60,7 @@ const useUIStore = create((set, get) => ({
     prompt: '',
     isGenerating: false,
     currentQuestionIndex: 0,
+    facePhoto: null,
     answers: {
       category: '',
       mood: '',

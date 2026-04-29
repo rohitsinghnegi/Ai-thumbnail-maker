@@ -4,10 +4,12 @@ import Footer from './components/Footer';
 import LandingPage from './components/LandingPage';
 import ModeSelection from './components/ModeSelection';
 import PromptInput from './components/PromptInput';
+import PhotoUpload from './components/PhotoUpload';
 import QuestionFlow from './components/QuestionFlow';
 import LoadingScreen from './components/LoadingScreen';
 import ResultsGrid from './components/ResultsGrid';
 import HistoryPage from './components/HistoryPage';
+
 
 function App() {
   const { currentStep } = useUIStore();
@@ -17,6 +19,7 @@ function App() {
       case 'landing':   return <LandingPage />;
       case 'mode':      return <ModeSelection />;
       case 'input':     return <PromptInput />;
+      case 'photo':     return <PhotoUpload />;
       case 'questions': return <QuestionFlow />;
       case 'loading':   return <LoadingScreen />;
       case 'results':   return <ResultsGrid />;
